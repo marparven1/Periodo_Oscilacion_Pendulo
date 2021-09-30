@@ -1,0 +1,155 @@
+---
+title: "Periodo de oscilación del péndulo"
+output: html_document
+params:
+  longitud_hilo:
+    label: "Longitud del hilo (en metros)"
+    value: 1
+    min: 0.1
+    step: 0.1
+  aceleracion_gravedad:
+    label: "Aceleración de la gravedad (en metros por segundo al cuadrado)"
+    value: 9.8
+    min: 0.01
+    step: 0.01
+  amplitud:
+    label: "Amplitud del péndulo (en radianes)"
+    input: slider
+    value: !r round(pi / 4, digits = 2)
+    min: 0
+    max: !r round(pi, digits = 2)
+    step: 0.01
+---
+
+```{r replicabilidad, include=FALSE}
+set.seed(4205687)
+```
+
+Un péndulo es un sistema físico configurado por una masa suspendida de un eje horizontal fijo mediante un hilo (de longitud \( L \)) o similar. Cuando el péndulo se desplaza de su posición de equilibrio (formando el hilo un ángulo \( \theta_{0} \), llamado _amplitud_, con la vertical), la acción de la gravedad induce una oscilación alrededor de la misma.
+
+El _periodo de oscilación_ \( T \) del péndulo es el tiempo que transcurre desde que el péndulo inicia una oscilación hasta que regresa a la posición inicial. En el caso de que la amplitud sea pequeña (\( \theta_{0} \ll 1\,\mathrm{rad} \)), se tiene que
+\[
+  T \approx 2 \pi \sqrt{\frac{L}{g}}
+\]
+donde \( g \approx 9.8\,\mathrm{m}/\mathrm{s}^{2} \) es la aceleración de la gravedad.
+
+Para amplitudes mayores, se tiene que
+\[
+  T = \int_{0}^{\frac{\pi}{2}} 4 \sqrt{\frac{L}{g}} 
+  \frac{1}{\sqrt{1 - \sin^{2} \frac{\theta_{0}}{2} \sin^2 \theta}}
+  \mathop{}\!d \theta
+\]
+
+Puesto que esta integral es complicada de resolver de manera exacta, vamos a utilizar el método de Montecarlo para estimarla.
+
+En primer lugar, establecemos los valores de los parámetros del problema.
+
+```{r parametros, include=FALSE}
+longitud_hilo <- params$longitud_hilo
+aceleracion_gravedad <- params$aceleracion_gravedad
+amplitud <- params$amplitud
+```
+
+* Longitud del hilo: \( `r longitud_hilo`\,\mathrm{m} \).
+* Aceleración de la gravedad: \( `r aceleracion_gravedad`\,\mathrm{m}/\mathrm{s}^{2} \).
+* Amplitud: \( `r amplitud`\,\mathrm{rad} \)
+
+Para facilitar la aplicación del método de Montecarlo, realizamos el cambio de variable \( \theta = \frac{\pi}{2} u \), de tal manera que
+\[
+  T = \int_{0}^{1} 2 \pi \sqrt{\frac{L}{g}}
+  \frac{
+    1
+  }{
+    \sqrt{1 - \sin^{2} \frac{\theta_{0}}{2} \sin^2 \frac{\pi u}{2}}
+  }
+  \mathop{}\!d u
+\]
+
+Por tanto,
+\[
+  T =
+  \mathbb{E}_{U} \Biggl[
+    2 \pi \sqrt{\frac{L}{g}}
+    \frac{
+      1
+    }{
+      \sqrt{1 - \sin^{2} \frac{\theta_{0}}{2} \sin^2 \frac{\pi u}{2}}
+    }
+    \Biggr] =
+  2 \pi \sqrt{\frac{L}{g}}
+  \mathbb{E}_{U} \Biggl[
+    \frac{
+      1
+    }{
+      \sqrt{1 - \sin^{2} \frac{\theta_{0}}{2} \sin^2 \frac{\pi u}{2}}
+    }
+    \Biggr]
+\]
+y
+\[
+  \sigma =
+  \sqrt{
+    Var_{U} \Biggl(
+      2 \pi \sqrt{\frac{L}{g}}
+      \frac{
+        1
+      }{
+        \sqrt{1 - \sin^{2} \frac{\theta_{0}}{2} \sin^2 \frac{\pi u}{2}}
+      }
+      \Biggr)
+  } =
+  2 \pi \sqrt{\frac{L}{g}}
+  \sqrt{
+    Var_{U} \Biggl(
+      \frac{
+        1
+      }{
+        \sqrt{1 - \sin^{2} \frac{\theta_{0}}{2} \sin^2 \frac{\pi u}{2}}
+      }
+      \Biggr)
+  }
+\]
+
+Para mayor eficiencia, calculamos una sola vez las constantes que aparecen en las expresiones anteriores.
+
+```{r calculo-constantes}
+constante_integral <- 2 * pi * sqrt(longitud_hilo / aceleracion_gravedad)
+sin_2_mitad_amplitud <- sin(amplitud / 2)^2
+```
+
+Estamos ya en condiciones de establecer la forma de generar valores aleatorios y de definir la función \( g \) que se aplicará a esos valores aleatorios.
+
+```{r generacion}
+genera_valor_aleatorio <- function() {
+  runif(1)
+}
+
+g <- function(u) {
+  1 / sqrt(1 - sin_2_mitad_amplitud * sin(pi * u / 2)^2)
+}
+```
+
+A continuación, replicamos una cantidad de veces parametrizada por la variable `n` el proceso de generar un valor aleatorio y aplicarle la función \( g \).
+
+```{r replicacion}
+n <- 1e5
+valores_g <- replicate(n, {
+  u <- genera_valor_aleatorio()
+  g(u)
+})
+```
+
+Finalmente, estimamos el valor de la **integral** a partir de los valores generados. Obsérvese, pues, que tanto para estimar el periodo de oscilación del péndulo como para proporcionar un intervalo de confianza de esa estimación, **es necesario tener en cuenta la constante que multiplica a la integral**.
+
+```{r estimacion}
+estimacion_T <- constante_integral * mean(valores_g)
+
+probabilidad_cobertura <- 0.95
+alfa <- 1 - probabilidad_cobertura
+percentil <- qnorm(1 - alfa / 2)
+error_estandar <- constante_integral * sqrt(var(valores_g) / n)
+intervalo_confianza_T <-
+  estimacion_T + c(-1, 1) * error_estandar * percentil
+```
+
+En un lugar donde la aceleración de la gravedad es \( `r aceleracion_gravedad`\,\mathrm{m} / \mathrm{s}^2 \), el valor estimado para la oscilación del péndulo que cuelga de un hilo de longitud \( `r longitud_hilo` \) `r if (longitud_hilo == 1) {"metro"} else {"metros"}` cuando se deja caer desde una amplitud de \( `r round(amplitud, 2)` \) radianes es \( `r estimacion_T` \), siendo \( (`r intervalo_confianza_T`) \) un intervalo de confianza con probabilidad de cobertura \( `r probabilidad_cobertura` \).
