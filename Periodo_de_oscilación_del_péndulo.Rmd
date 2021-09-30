@@ -1,6 +1,14 @@
 ---
 title: "Periodo de oscilación del péndulo"
-output: html_document
+subtitle: "Técnicas de Computación para la Estadística. \n 4º Estadística"
+author: "Marta Venegas Pardo"
+output: 
+  prettydoc::html_pretty:
+   theme: tactile
+   highlight: vignette
+    
+¢output: rmdformats::material
+
 params:
   longitud_hilo:
     label: "Longitud del hilo (en metros)"
@@ -49,6 +57,7 @@ longitud_hilo <- params$longitud_hilo
 aceleracion_gravedad <- params$aceleracion_gravedad
 amplitud <- params$amplitud
 ```
+
 
 * Longitud del hilo: \( `r longitud_hilo`\,\mathrm{m} \).
 * Aceleración de la gravedad: \( `r aceleracion_gravedad`\,\mathrm{m}/\mathrm{s}^{2} \).
